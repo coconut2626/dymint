@@ -442,7 +442,8 @@ func (txmp *TxMempool) Update(
 	txmp.metrics.Size.Set(float64(size))
 	if size > 0 {
 		if txmp.config.Recheck {
-			txmp.recheckTransactions()
+			// try to remove step re-check txs in the mempool to increase the performance
+			//txmp.recheckTransactions()
 		} else {
 			txmp.notifyTxsAvailable()
 		}
