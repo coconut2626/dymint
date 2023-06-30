@@ -1,9 +1,19 @@
 package store
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
 
 	"github.com/dgraph-io/badger/v3"
+)
+
+var (
+	// ErrKeyNotFound is returned if key is not found in KVStore.
+	ErrKeyNotFound = errors.New("key not found")
+	ErrKeyEmpty    = errors.New("key is empty")
+	ErrValueNil    = errors.New("value is nil")
+	ErrBatchClosed = errors.New("batch is closed")
 )
 
 // KVStore encapsulates key-value store abstraction, in minimalistic interface.
@@ -36,6 +46,16 @@ type Iterator interface {
 }
 
 // NewDefaultInMemoryKVStore builds KVStore that works in-memory (without accessing disk).
+// func NewDefaultInMemoryKVStore() KVStore {
+// 	db, err := badger.Open(badger.DefaultOptions("").WithInMemory(true))
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	return &BadgerKV{
+// 		db: db,
+// 	}
+// }
+
 func NewDefaultInMemoryKVStore() KVStore {
 	db, err := badger.Open(badger.DefaultOptions("").WithInMemory(true))
 	if err != nil {
@@ -47,15 +67,26 @@ func NewDefaultInMemoryKVStore() KVStore {
 }
 
 // NewDefaultKVStore creates instance of default key-value store.
+// func NewDefaultKVStore(rootDir, dbPath, dbName string) KVStore {
+// 	path := filepath.Join(rootify(rootDir, dbPath), dbName)
+// 	db, err := badger.Open(badger.DefaultOptions(path))
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	return &BadgerKV{
+// 		db: db,
+// 	}
+// }
+
 func NewDefaultKVStore(rootDir, dbPath, dbName string) KVStore {
 	path := filepath.Join(rootify(rootDir, dbPath), dbName)
-	db, err := badger.Open(badger.DefaultOptions(path))
+	// db, err := badger.Open(badger.DefaultOptions(path))
+	fmt.Println(fmt.Sprintf("-------------------------rootDir=%s, dbPath=%s, dbName:%s", rootDir, dbPath, dbName))
+	db, err := NewGoLevelDB(dbName, path)
 	if err != nil {
 		panic(err)
 	}
-	return &BadgerKV{
-		db: db,
-	}
+	return db
 }
 
 // rootify works just like in cosmos-sdk

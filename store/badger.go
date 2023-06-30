@@ -9,11 +9,6 @@ import (
 var _ KVStore = &BadgerKV{}
 var _ Batch = &BadgerBatch{}
 
-var (
-	// ErrKeyNotFound is returned if key is not found in KVStore.
-	ErrKeyNotFound = errors.New("key not found")
-)
-
 // BadgerKV is a implementation of KVStore using Badger v3.
 type BadgerKV struct {
 	db *badger.DB
