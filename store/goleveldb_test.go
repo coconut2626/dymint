@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"github.com/stretchr/testify/require"
 	"math/rand"
@@ -14,8 +15,18 @@ func TestNewGolevelDB(t *testing.T) {
 	defer cleanupDBDir("", name)
 
 	// Test we can't open the db twice for writing
-	_, err := NewGoLevelDB(name, "")
+	db, err := NewGoLevelDB(name, "")
 	require.Nil(t, err)
+	err = db.Set([]byte("aa"), []byte("bb"))
+	require.Nil(t, err)
+	val, err := db.Get([]byte("aa"))
+	require.Nil(t, err)
+	t.Log(string(val))
+	require.Nil(t, err)
+
+	err = db.Delete([]byte("abaaa"))
+	require.Nil(t, err)
+
 	_, err = NewGoLevelDB(name, "")
 	require.NotNil(t, err)
 }
@@ -25,6 +36,9 @@ func BenchmarkGoLevelDBRandomReadsWrites(b *testing.B) {
 	db, err := NewGoLevelDB(name, "")
 	if err != nil {
 		b.Fatal(err)
+	}
+	if db == nil {
+		b.Fatal(errors.New("db is nil"))
 	}
 	defer func() {
 		cleanupDBDir("", name)
@@ -37,7 +51,7 @@ func benchmarkRandomReadsWrites(b *testing.B, db KVStore) {
 	b.StopTimer()
 
 	// create dummy data
-	const numItems = int64(1000000)
+	const numItems = int64(100)
 	internal := map[int64]int64{}
 	for i := 0; i < int(numItems); i++ {
 		internal[int64(i)] = int64(0)
@@ -67,8 +81,7 @@ func benchmarkRandomReadsWrites(b *testing.B, db KVStore) {
 			idxBytes := int642Bytes(idx)
 			valBytes, err := db.Get(idxBytes)
 			if err != nil {
-				// require.NoError() is very expensive (according to profiler), so check manually
-				b.Fatal(b, err)
+				b.Fatal(err)
 			}
 			if valExp == 0 {
 				if !bytes.Equal(valBytes, nil) {

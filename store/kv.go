@@ -2,7 +2,6 @@ package store
 
 import (
 	"errors"
-	"fmt"
 	"path/filepath"
 
 	"github.com/dgraph-io/badger/v3"
@@ -80,8 +79,6 @@ func NewDefaultInMemoryKVStore() KVStore {
 
 func NewDefaultKVStore(rootDir, dbPath, dbName string) KVStore {
 	path := filepath.Join(rootify(rootDir, dbPath), dbName)
-	// db, err := badger.Open(badger.DefaultOptions(path))
-	fmt.Println(fmt.Sprintf("-------------------------rootDir=%s, dbPath=%s, dbName:%s", rootDir, dbPath, dbName))
 	db, err := NewGoLevelDB(dbName, path)
 	if err != nil {
 		panic(err)

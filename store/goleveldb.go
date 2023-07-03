@@ -43,7 +43,7 @@ func (g *GolevelDB) Get(key []byte) ([]byte, error) {
 
 	res, err := g.db.Get(key, nil)
 	if err != nil {
-		if err == ErrKeyNotFound {
+		if err == leveldb.ErrNotFound {
 			return nil, nil
 		}
 		return nil, err
