@@ -67,13 +67,13 @@ func TestStoreLoad(t *testing.T) {
 			testutil.GetRandomBlock(2, 20),
 		}},
 		// TODO(tzdybal): this test needs extra handling because of lastCommits
-		//{"blocks out of order", []*types.Block{
+		// {"blocks out of order", []*types.Block{
 		//	getRandomBlock(2, 20),
 		//	getRandomBlock(3, 30),
 		//	getRandomBlock(4, 100),
 		//	getRandomBlock(5, 10),
 		//	getRandomBlock(1, 10),
-		//}},
+		// }},
 	}
 
 	tmpDir, err := os.MkdirTemp("", "optimint_test")
@@ -85,7 +85,7 @@ func TestStoreLoad(t *testing.T) {
 		}
 	}()
 
-	for _, kv := range []store.KVStore{store.NewDefaultInMemoryKVStore(), store.NewDefaultKVStore(tmpDir, "db", "test")} {
+	for _, kv := range []store.KVStore{store.NewDefaultKVStore(tmpDir, "db", "test")} {
 		for _, c := range cases {
 			t.Run(c.name, func(t *testing.T) {
 				assert := assert.New(t)

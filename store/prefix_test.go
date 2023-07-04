@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,10 +11,14 @@ import (
 func TestPrefixKV(t *testing.T) {
 	t.Parallel()
 
+	name := fmt.Sprintf("test_%x", randStr(12))
+	defer cleanupDBDir("", name)
+
 	assert := assert.New(t)
 	require := require.New(t)
 
-	base := NewDefaultInMemoryKVStore()
+	base, err := NewGoLevelDB(name, "")
+	require.Nil(err)
 
 	p1 := NewPrefixKV(base, []byte{1})
 	p2 := NewPrefixKV(base, []byte{2})
@@ -27,7 +32,7 @@ func TestPrefixKV(t *testing.T) {
 	val22 := []byte("val22")
 
 	// set different values in each preffix
-	err := p1.Set(key1, val11)
+	err = p1.Set(key1, val11)
 	require.NoError(err)
 
 	err = p1.Set(key2, val12)

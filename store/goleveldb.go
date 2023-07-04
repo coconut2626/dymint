@@ -1,8 +1,7 @@
 package store
 
 import (
-	"bytes"
-	"fmt"
+	"errors"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
@@ -25,11 +24,9 @@ func NewGoLevelDBWithOpts(name string, dir string, o *opt.Options) (*GolevelDB, 
 	dbPath := filepath.Join(dir, name+".db")
 	db, err := leveldb.OpenFile(dbPath, o)
 	if err != nil {
-		fmt.Printf("NewGoLevelDBWithOpts err=%v\n", err.Error())
 		return nil, err
 	}
 
-	fmt.Printf("NewGoLevelDBWithOpts opened")
 	database := &GolevelDB{
 		db: db,
 	}
@@ -43,8 +40,8 @@ func (g *GolevelDB) Get(key []byte) ([]byte, error) {
 
 	res, err := g.db.Get(key, nil)
 	if err != nil {
-		if err == leveldb.ErrNotFound {
-			return nil, nil
+		if errors.Is(err, leveldb.ErrNotFound) {
+			return nil, ErrKeyNotFound
 		}
 		return nil, err
 	}
@@ -88,9 +85,6 @@ func (g *golevelDBBatch) Set(key, value []byte) error {
 	if len(value) == 0 {
 		return ErrValueNil
 	}
-	if g.batch == nil {
-		return ErrBatchClosed
-	}
 
 	g.batch.Put(key, value)
 	return nil
@@ -105,105 +99,58 @@ func (g *golevelDBBatch) Delete(key []byte) error {
 }
 
 func (g *golevelDBBatch) Commit() error {
+	if g.batch == nil {
+		return ErrBatchClosed
+	}
+	err := g.db.db.Write(g.batch, nil)
+	if err != nil {
+		return err
+	}
+	return g.Close()
+}
+
+func (g *golevelDBBatch) Close() error {
+	if g.batch != nil {
+		g.batch.Reset()
+		g.batch = nil
+	}
 	return nil
 }
 
 func (g *golevelDBBatch) Discard() {
 }
 
-func newGoLevelDBBatch() *golevelDBBatch {
+func newGoLevelDBBatch(db *GolevelDB) *golevelDBBatch {
 	return &golevelDBBatch{
+		db:    db,
 		batch: new(leveldb.Batch),
 	}
 }
 
 func (g *GolevelDB) NewBatch() Batch {
-	return newGoLevelDBBatch()
+	return newGoLevelDBBatch(g)
 }
 
 type golevelDBIterator struct {
-	prefix, start, end   []byte
-	source               iterator.Iterator
-	isReverse, isInvalid bool
+	prefix []byte
+	source iterator.Iterator
 }
 
-func newGolevelDBIterator(source iterator.Iterator, start, end []byte, isReverse bool) *golevelDBIterator {
-	if isReverse {
-		if end == nil {
-			source.Last()
-		} else {
-			valid := source.Seek(end)
-			if valid {
-				eoakey := source.Key() // end or after key
-				if bytes.Compare(end, eoakey) <= 0 {
-					source.Prev()
-				}
-			} else {
-				source.Last()
-			}
-		}
-	} else {
-		if start == nil {
-			source.First()
-		} else {
-			source.Seek(start)
-		}
-	}
+func newGolevelDBIterator(source iterator.Iterator, prefix []byte) *golevelDBIterator {
+	source.Seek(prefix)
 	return &golevelDBIterator{
-		source:    source,
-		start:     start,
-		end:       end,
-		isReverse: isReverse,
-		isInvalid: false,
+		source: source,
+		prefix: prefix,
 	}
 }
 
 func (g *golevelDBIterator) Valid() bool {
-	// Once invalid, forever invalid.
-	if g.isInvalid {
-		return false
-	}
-
-	// If source errors, invalid.
-	if err := g.Error(); err != nil {
-		g.isInvalid = true
-		return false
-	}
-
-	// If source is invalid, invalid.
-	if !g.source.Valid() {
-		g.isInvalid = true
-		return false
-	}
-
-	// If key is end or past it, invalid.
-	start := g.start
-	end := g.end
-	key := g.source.Key()
-
-	if g.isReverse {
-		if start != nil && bytes.Compare(key, start) < 0 {
-			g.isInvalid = true
-			return false
-		}
-	} else {
-		if end != nil && bytes.Compare(end, key) <= 0 {
-			g.isInvalid = true
-			return false
-		}
-	}
-
-	// Valid
-	return true
+	return g.source.Valid()
 }
 
 func (g *golevelDBIterator) Next() {
 	g.assertIsValid()
-	if g.isReverse {
-		g.source.Prev()
-	} else {
-		g.source.Next()
-	}
+	g.source.Next()
 }
 
 func (g *golevelDBIterator) Key() []byte {
@@ -232,7 +179,7 @@ var _ Iterator = &golevelDBIterator{}
 func (g *GolevelDB) PrefixIterator(prefix []byte) Iterator {
 	slice := util.BytesPrefix(prefix)
 	iter := g.db.NewIterator(slice, nil)
-	return newGolevelDBIterator(iter, slice.Start, slice.Limit, false)
+	return newGolevelDBIterator(iter, prefix)
 }
 
 func (g *golevelDBIterator) assertIsValid() {

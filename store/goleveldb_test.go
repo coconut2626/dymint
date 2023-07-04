@@ -1,12 +1,9 @@
 package store
 
 import (
-	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"github.com/stretchr/testify/require"
-	"math/rand"
 	"testing"
 )
 
@@ -17,6 +14,7 @@ func TestNewGolevelDB(t *testing.T) {
 	// Test we can't open the db twice for writing
 	db, err := NewGoLevelDB(name, "")
 	require.Nil(t, err)
+
 	err = db.Set([]byte("aa"), []byte("bb"))
 	require.Nil(t, err)
 	val, err := db.Get([]byte("aa"))
@@ -31,85 +29,84 @@ func TestNewGolevelDB(t *testing.T) {
 	require.NotNil(t, err)
 }
 
-func BenchmarkGoLevelDBRandomReadsWrites(b *testing.B) {
+func TestGoLevelDBGetErrors(t *testing.T) {
 	name := fmt.Sprintf("test_%x", randStr(12))
+	defer cleanupDBDir("", name)
+
+	// Test we can't open the db twice for writing
 	db, err := NewGoLevelDB(name, "")
-	if err != nil {
-		b.Fatal(err)
-	}
-	if db == nil {
-		b.Fatal(errors.New("db is nil"))
-	}
-	defer func() {
-		cleanupDBDir("", name)
-	}()
+	require.Nil(t, err)
 
-	benchmarkRandomReadsWrites(b, db)
-}
-
-func benchmarkRandomReadsWrites(b *testing.B, db KVStore) {
-	b.StopTimer()
-
-	// create dummy data
-	const numItems = int64(100)
-	internal := map[int64]int64{}
-	for i := 0; i < int(numItems); i++ {
-		internal[int64(i)] = int64(0)
+	tc := []struct {
+		name string
+		key  []byte
+		err  error
+	}{
+		{"empty key", []byte{}, ErrKeyEmpty},
+		{"not found key", []byte("missing key"), ErrKeyNotFound},
 	}
 
-	b.StartTimer()
-
-	for i := 0; i < b.N; i++ {
-		// Write something
-		{
-			idx := rand.Int63n(numItems) //nolint:gosec
-			internal[idx]++
-			val := internal[idx]
-			idxBytes := int642Bytes(idx)
-			valBytes := int642Bytes(val)
-			err := db.Set(idxBytes, valBytes)
-			if err != nil {
-				// require.NoError() is very expensive (according to profiler), so check manually
-				b.Fatal(b, err)
+	for _, tt := range tc {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := db.Get(tt.key)
+			if !errors.Is(err, tt.err) {
+				t.Errorf("Invalid err, got: %v expected %v", err, tt.err)
 			}
-		}
-
-		// Read something
-		{
-			idx := rand.Int63n(numItems) //nolint:gosec
-			valExp := internal[idx]
-			idxBytes := int642Bytes(idx)
-			valBytes, err := db.Get(idxBytes)
-			if err != nil {
-				b.Fatal(err)
-			}
-			if valExp == 0 {
-				if !bytes.Equal(valBytes, nil) {
-					b.Errorf("Expected %v for %v, got %X", nil, idx, valBytes)
-					break
-				}
-			} else {
-				if len(valBytes) != 8 {
-					b.Errorf("Expected length 8 for %v, got %X", idx, valBytes)
-					break
-				}
-				valGot := bytes2Int64(valBytes)
-				if valExp != valGot {
-					b.Errorf("Expected %v for %v, got %v", valExp, idx, valGot)
-					break
-				}
-			}
-		}
-
+		})
 	}
 }
 
-func int642Bytes(i int64) []byte {
-	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, uint64(i))
-	return buf
+func TestGoLevelDBSetErrors(t *testing.T) {
+	name := fmt.Sprintf("test_%x", randStr(12))
+	defer cleanupDBDir("", name)
+
+	// Test we can't open the db twice for writing
+	db, err := NewGoLevelDB(name, "")
+	require.Nil(t, err)
+
+	tc := []struct {
+		name  string
+		key   []byte
+		value []byte
+		err   error
+	}{
+		{"empty key", []byte{}, []byte{}, ErrKeyEmpty},
+		{"invalid key", []byte("!badger!key"), []byte("invalid header"), nil},
+	}
+
+	for _, tt := range tc {
+		t.Run(tt.name, func(t *testing.T) {
+			err := db.Set(tt.key, tt.value)
+			if !errors.Is(tt.err, err) {
+				t.Errorf("Invalid err, got: %v expected %v", err, tt.err)
+			}
+		})
+	}
 }
 
-func bytes2Int64(buf []byte) int64 {
-	return int64(binary.BigEndian.Uint64(buf))
+func TestGoLevelDBDeleteErrors(t *testing.T) {
+	name := fmt.Sprintf("test_%x", randStr(12))
+	defer cleanupDBDir("", name)
+
+	// Test we can't open the db twice for writing
+	db, err := NewGoLevelDB(name, "")
+	require.Nil(t, err)
+
+	tc := []struct {
+		name string
+		key  []byte
+		err  error
+	}{
+		{"empty key", []byte{}, ErrKeyEmpty},
+		{"invalid key", []byte("!badger!key"), nil},
+	}
+
+	for _, tt := range tc {
+		t.Run(tt.name, func(t *testing.T) {
+			err := db.Delete(tt.key)
+			if !errors.Is(err, tt.err) {
+				t.Errorf("Invalid err, got: %v expected %v", err, tt.err)
+			}
+		})
+	}
 }
